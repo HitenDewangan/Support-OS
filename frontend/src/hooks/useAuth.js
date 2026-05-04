@@ -1,60 +1,76 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-
-// Mock users database
-const MOCK_USERS = {
-  'admin@supportos.com': { password: 'admin123', name: 'Admin User', role: 'admin' },
-  'agent@supportos.com': { password: 'agent123', name: 'Support Agent', role: 'agent' },
-  'customer@supportos.com': { password: 'customer123', name: 'Valued Customer', role: 'customer' },
-  'super@supportos.com': { password: 'super123', name: 'Platform Admin', role: 'superadmin' },
-};
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import authService from "../services/authService";
 
 const useAuth = () => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(() => {
+    const savedUser = localStorage.getItem("supportos_user");
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
+  const [selectedBusiness, setSelectedBusiness] = useState(() => {
+    const saved = localStorage.getItem("supportos_selected_business");
+    return saved ? JSON.parse(saved) : null;
+  });
+  const hasTokenAndUser =
+    !!localStorage.getItem("token") && !!localStorage.getItem("supportos_user");
+  const [loading, setLoading] = useState(!hasTokenAndUser);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('supportos_user');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
+    const token = localStorage.getItem("token");
+    const savedUser = localStorage.getItem("supportos_user");
+
+    if (!token) {
+      setLoading(false);
+      return;
     }
-    setLoading(false);
+
+    if (savedUser) {
+      setLoading(false);
+      return;
+    }
+
+    authService
+      .getCurrentUser()
+      .then((data) => {
+        setUser(data.user);
+        localStorage.setItem("supportos_user", JSON.stringify(data.user));
+      })
+      .catch(() => {
+        localStorage.removeItem("token");
+        localStorage.removeItem("supportos_user");
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const login = async (email, password) => {
     setLoading(true);
-    // Simulate API call
-    return new Promise((resolve, reject) => {
-      setTimeout(() => {
-        const mockUser = MOCK_USERS[email];
-        if (mockUser && mockUser.password === password) {
-          const userData = {
-            email,
-            name: mockUser.name,
-            role: mockUser.role,
-            avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${mockUser.name}`,
-          };
-          setUser(userData);
-          localStorage.setItem('supportos_user', JSON.stringify(userData));
-          setLoading(false);
-          resolve(userData);
-        } else {
-          setLoading(false);
-          reject(new Error('Invalid credentials'));
-        }
-      }, 800);
-    });
+    const data = await authService.login({ email, password });
+    const userData = data.user;
+    setUser(userData);
+    localStorage.setItem("supportos_user", JSON.stringify(userData));
+    setLoading(false);
+    return { userData, businesses: data.businesses || [] };
   };
 
-  const logout = () => {
+  const selectBusiness = (business) => {
+    setSelectedBusiness(business);
+    localStorage.setItem("supportos_selected_business", JSON.stringify(business));
+  };
+
+  const logout = async () => {
+    await authService.logout();
     setUser(null);
-    localStorage.removeItem('supportos_user');
-    navigate('/login');
+    setSelectedBusiness(null);
+    localStorage.removeItem("supportos_user");
+    localStorage.removeItem("supportos_selected_business");
+    navigate("/login");
   };
 
   return {
     user,
+    selectedBusiness,
+    selectBusiness,
     isAuthenticated: !!user,
     loading,
     login,

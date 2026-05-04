@@ -2,19 +2,27 @@ import axiosInstance from './axiosInstance';
 
 const tenantService = {
   getTenants: async () => {
-    const response = await axiosInstance.get('/tenants');
+    const response = await axiosInstance.get('/admin/businesses');
     return response.data;
   },
-  getTenantById: async (id) => {
-    const response = await axiosInstance.get(`/tenants/${id}`);
+  getPendingTenants: async () => {
+    const response = await axiosInstance.get('/admin/pending');
     return response.data;
   },
-  createTenant: async (tenantData) => {
-    const response = await axiosInstance.post('/tenants', tenantData);
+  getStats: async () => {
+    const response = await axiosInstance.get('/admin/stats');
     return response.data;
   },
-  updateTenant: async (id, tenantData) => {
-    const response = await axiosInstance.patch(`/tenants/${id}`, tenantData);
+  approveTenant: async (id) => {
+    const response = await axiosInstance.patch(`/admin/users/${id}/approve`);
+    return response.data;
+  },
+  rejectTenant: async (id) => {
+    const response = await axiosInstance.patch(`/admin/users/${id}/reject`);
+    return response.data;
+  },
+  createTenant: async (data) => {
+    const response = await axiosInstance.post('/admin/create-tenant', data);
     return response.data;
   },
 };

@@ -1,24 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
-import { SOCKET_URL } from '../utils/constants';
+import { useEffect } from 'react';
+import { useSocketContext } from '../contexts/SocketContext';
 
-export const useSocket = () => {
-  const [isConnected, setIsConnected] = useState(false);
-  const socketRef = useRef(null);
+export const useSocket = (ticketId) => {
+  const { isConnected, on, emit, joinRoom, leaveRoom } = useSocketContext();
 
   useEffect(() => {
-    // Placeholder for actual socket implementation (e.g., socket.io-client)
-    console.log(`Connecting to socket at ${SOCKET_URL}`);
-    setIsConnected(true);
+    if (!ticketId) return;
+    joinRoom(ticketId);
+    return () => leaveRoom(ticketId);
+  }, [ticketId, joinRoom, leaveRoom]);
 
-    return () => {
-      console.log('Disconnecting socket');
-      setIsConnected(false);
-    };
-  }, []);
-
-  const emit = (event, data) => {
-    console.log(`Emitting ${event}:`, data);
-  };
-
-  return { isConnected, emit };
+  return { isConnected, on, emit };
 };

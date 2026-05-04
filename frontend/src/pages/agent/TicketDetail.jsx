@@ -1,73 +1,72 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, User, Mail, Globe, Calendar, Shield, ExternalLink, MoreVertical } from 'lucide-react';
+import { ArrowLeft, Mail, Globe, Calendar, MoreVertical } from 'lucide-react';
 import ChatWindow from '../../components/chat/ChatWindow';
-import TicketTimeline from '../../components/ticket/TicketTimeline';
 import TicketStatusBadge from '../../components/ticket/TicketStatusBadge';
 import PrioritySelector from '../../components/ticket/PrioritySelector';
 import Button from '../../components/common/Button';
 import Avatar from '../../components/common/Avatar';
-
 import AISuggestedReply from './AISuggestedReply';
+import ticketService from '../../services/ticketService';
+import useNotification from '../../hooks/useNotification';
+import { formatDate } from '../../utils/formatDate';
+import { useSocketContext } from '../../contexts/SocketContext';
 
 const TicketDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const notification = useNotification();
+  const [ticket, setTicket] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState(false);
+  const [aiSuggestion, setAISuggestion] = useState('');
 
-  const ticket = {
-    id: id || 'TC-1024',
-    subject: 'Server connection issues in EMEA',
-    status: 'Open',
-    priority: 'High',
-    customer: {
-      name: 'Sarah Connor',
-      email: 'sarah.c@cyberdyne.com',
-      location: 'Los Angeles, CA',
-      joinDate: 'Jan 2024',
-    },
-    meta: {
-      category: 'Technical Support',
-      assignedAgent: 'SupportOS Agent',
-      createdAt: 'Oct 24, 2024, 10:00 AM',
+  useEffect(() => {
+    ticketService.getTicketById(id)
+      .then(({ ticket }) => setTicket(ticket))
+      .catch(() => navigate('/agent/queue'))
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  const handleStatusChange = async (status) => {
+    setUpdating(true);
+    try {
+      const { ticket: updated } = await ticketService.updateTicket(id, { status });
+      setTicket(updated);
+      notification.success(`Ticket marked as ${status}`);
+    } catch {
+      notification.error('Failed to update ticket');
+    } finally {
+      setUpdating(false);
     }
   };
 
-  const containerStyle = {
-    display: 'grid',
-    gridTemplateColumns: '1fr 340px',
-    gap: '32px',
-    height: 'calc(100vh - 160px)',
-  };
+  const { on } = useSocketContext();
+
+  // Real-time ticket status/assignment updates
+  useEffect(() => {
+    if (!id) return;
+    return on('ticket-updated', (updates) => {
+      setTicket((prev) => prev ? { ...prev, ...updates } : prev);
+    });
+  }, [id, on]);
 
   const infoColumnStyle = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '24px',
-    overflowY: 'auto',
-    paddingRight: '8px',
+    display: 'flex', flexDirection: 'column', gap: '20px',
+    overflowY: 'auto', paddingRight: '4px',
   };
 
   const sectionTitleStyle = {
-    fontSize: '14px',
-    fontWeight: '700',
-    color: 'var(--text-bright)',
-    marginBottom: '16px',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
+    fontSize: '11px', fontWeight: '700', color: 'var(--text)',
+    marginBottom: '14px', textTransform: 'uppercase', letterSpacing: '1px',
   };
 
-  const infoRowStyle = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    fontSize: '14px',
-    color: 'var(--text)',
-    marginBottom: '12px',
-  };
+  if (loading) return <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text)' }}>Loading ticket...</div>;
+  if (!ticket) return null;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', height: '100%' }}>
-      {/* Top Header */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', height: '100%' }}>
+      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <Button variant="ghost" size="small" onClick={() => navigate('/agent/queue')}>
@@ -75,72 +74,80 @@ const TicketDetail = () => {
           </Button>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '18px', fontWeight: '800', color: 'var(--text-bright)' }}>{ticket.id}</span>
+              <span style={{ fontSize: '16px', fontWeight: '800', color: 'var(--text-bright)' }}>#{ticket._id.slice(-6).toUpperCase()}</span>
               <TicketStatusBadge status={ticket.status} />
             </div>
-            <div style={{ fontSize: '14px', color: 'var(--text)', marginTop: '2px' }}>{ticket.subject}</div>
+            <div style={{ fontSize: '13px', color: 'var(--text)', marginTop: '2px' }}>{ticket.subject}</div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
-          <Button variant="outline">Close Ticket</Button>
-          <Button variant="primary">Submit Changes</Button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          {ticket.status !== 'resolved' && (
+            <Button variant="primary" loading={updating} onClick={() => handleStatusChange('resolved')}>Mark Resolved</Button>
+          )}
+          {ticket.status === 'resolved' && (
+            <Button variant="outline" loading={updating} onClick={() => handleStatusChange('open')}>Reopen</Button>
+          )}
           <Button variant="ghost" icon={MoreVertical} />
         </div>
       </div>
 
-      {/* Main Content Split */}
-      <div style={containerStyle}>
+      {/* Main Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '24px', height: 'calc(100vh - 180px)' }}>
         {/* Left: Chat */}
-        <div style={{ height: '100%' }}>
-          <ChatWindow contactName={ticket.customer.name} />
-        </div>
+        <ChatWindow
+          ticketId={id}
+          contactName={ticket.customerId?.name || 'Customer'}
+          senderRole="agent"
+          aiSuggestion={aiSuggestion}
+          onAISuggestionUsed={() => setAISuggestion('')}
+        />
 
-        {/* Right: Info + Timeline */}
+        {/* Right: Info */}
         <div style={infoColumnStyle}>
-          {/* Customer Card */}
-          <div className="glass-card" style={{ padding: '24px' }}>
-            <h4 style={sectionTitleStyle}>Customer Details</h4>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-              <Avatar name={ticket.customer.name} size="large" />
+          {/* Customer */}
+          <div className="glass-card" style={{ padding: '20px' }}>
+            <h4 style={sectionTitleStyle}>Customer</h4>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+              <Avatar name={ticket.customerId?.name} size="large" />
               <div>
-                <div style={{ fontWeight: '700', color: 'var(--text-bright)' }}>{ticket.customer.name}</div>
-                <div style={{ fontSize: '12px', color: 'var(--text)' }}>ID: C-90210</div>
+                <div style={{ fontWeight: '700', color: 'var(--text-bright)', fontSize: '15px' }}>{ticket.customerId?.name}</div>
+                <div style={{ fontSize: '12px', color: 'var(--text)' }}>Customer</div>
               </div>
             </div>
-            <div style={infoRowStyle}><Mail size={16} /> {ticket.customer.email}</div>
-            <div style={infoRowStyle}><Globe size={16} /> {ticket.customer.location}</div>
-            <div style={infoRowStyle}><Calendar size={16} /> Member since {ticket.customer.joinDate}</div>
-            <Button variant="outline" fullWidth size="small" style={{ marginTop: '8px' }}>View Profile</Button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', color: 'var(--text)', marginBottom: '8px' }}>
+              <Mail size={14} /> {ticket.customerId?.email}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', color: 'var(--text)' }}>
+              <Calendar size={14} /> Since {formatDate(ticket.customerId?.createdAt || ticket.createdAt)}
+            </div>
           </div>
 
-          {/* Ticket Properties */}
-          <div className="glass-card" style={{ padding: '24px' }}>
+          {/* Properties */}
+          <div className="glass-card" style={{ padding: '20px' }}>
             <h4 style={sectionTitleStyle}>Properties</h4>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
                 <label style={{ fontSize: '12px', color: 'var(--text)', display: 'block', marginBottom: '6px' }}>Priority</label>
                 <PrioritySelector value={ticket.priority} />
               </div>
               <div>
-                <label style={{ fontSize: '12px', color: 'var(--text)', display: 'block', marginBottom: '6px' }}>Category</label>
-                <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-bright)' }}>{ticket.meta.category}</div>
+                <label style={{ fontSize: '12px', color: 'var(--text)', display: 'block', marginBottom: '4px' }}>Category</label>
+                <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-bright)' }}>{ticket.category}</div>
               </div>
               <div>
-                <label style={{ fontSize: '12px', color: 'var(--text)', display: 'block', marginBottom: '6px' }}>Created At</label>
-                <div style={{ fontSize: '13px', color: 'var(--text-bright)' }}>{ticket.meta.createdAt}</div>
+                <label style={{ fontSize: '12px', color: 'var(--text)', display: 'block', marginBottom: '4px' }}>Created</label>
+                <div style={{ fontSize: '13px', color: 'var(--text-bright)' }}>{formatDate(ticket.createdAt)}</div>
               </div>
             </div>
           </div>
 
-          {/* AI Suggestions */}
-          <AISuggestedReply onSelect={(text) => console.log('AI Reply Selected:', text)} />
-
-          {/* Timeline */}
-          <div className="glass-card" style={{ padding: '24px' }}>
-            <h4 style={sectionTitleStyle}>History</h4>
-            <TicketTimeline />
-            <Button variant="ghost" fullWidth size="small" style={{ marginTop: '16px' }} icon={ExternalLink}>View Full Log</Button>
-          </div>
+          {/* AI Suggestions — only shown when ticket is active */}
+          {ticket.status !== 'resolved' && (
+            <AISuggestedReply
+              ticketId={id}
+              onSelect={(text) => setAISuggestion(text)}
+            />
+          )}
         </div>
       </div>
     </div>

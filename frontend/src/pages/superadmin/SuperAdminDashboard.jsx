@@ -1,24 +1,45 @@
-import React from 'react';
-import { Building2, Users, Database, Globe, ArrowUpRight, ArrowDownRight, Server, Activity, ShieldCheck, Zap, Plus, ExternalLink, MoreVertical } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Building2, Users, Database, Globe, ArrowUpRight, ArrowDownRight, Server, Activity, ShieldCheck, Zap, Plus, ExternalLink, MoreVertical, Clock } from 'lucide-react';
 import Badge from '../../components/common/Badge';
 import Button from '../../components/common/Button';
 import useNotification from '../../hooks/useNotification';
+import tenantService from '../../services/tenantService';
 
 const SuperAdminDashboard = () => {
   const notification = useNotification();
-  const stats = [
-    { label: 'Total Tenants', value: '128', icon: Building2, color: 'var(--accent)', trend: '+12%', up: true },
-    { label: 'Total Users', value: '12,450', icon: Users, color: '#3b82f6', trend: '+5%', up: true },
-    { label: 'Storage Used', value: '1.2 TB', icon: Database, color: '#f59e0b', trend: '+8%', up: true },
-    { label: 'System Uptime', value: '99.99%', icon: Globe, color: '#10b981', trend: 'stable', up: true },
-  ];
+  const [statsData, setStatsData] = useState(null);
+  const [recentTenants, setRecentTenants] = useState([]);
+  const [loadingStats, setLoadingStats] = useState(true);
 
-  const recentTenants = [
-    { name: 'Skyline Corp', industry: 'Technology', users: 450, status: 'active', date: '2h ago' },
-    { name: 'Global Logistics', industry: 'Transport', users: 120, status: 'active', date: '5h ago' },
-    { name: 'HealthCare Plus', industry: 'Medical', users: 890, status: 'pending', date: '1d ago' },
-    { name: 'EcoPower Solutions', industry: 'Energy', users: 55, status: 'active', date: '1d ago' },
-  ];
+  useEffect(() => {
+    Promise.all([
+      tenantService.getStats(),
+      tenantService.getTenants(),
+    ])
+      .then(([statsRes, tenantsRes]) => {
+        setStatsData(statsRes.stats);
+        const sorted = (tenantsRes.businesses || [])
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+          .slice(0, 5);
+        setRecentTenants(sorted);
+      })
+      .catch(() => notification.error('Failed to load dashboard data'))
+      .finally(() => setLoadingStats(false));
+  }, []);
+
+  const stats = statsData
+    ? [
+        { label: 'Total Businesses', value: String(statsData.totalBusinesses), icon: Building2, color: 'var(--accent)', trend: `${statsData.approvedBusinesses} approved`, up: true },
+        { label: 'Total Users', value: String(statsData.totalUsers), icon: Users, color: '#3b82f6', trend: `${statsData.totalAgents} agents`, up: true },
+        { label: 'Pending Approvals', value: String(statsData.pendingBusinesses), icon: Clock, color: '#f59e0b', trend: 'awaiting review', up: statsData.pendingBusinesses === 0 },
+        { label: 'Customers', value: String(statsData.totalCustomers), icon: Globe, color: '#10b981', trend: 'registered', up: true },
+      ]
+    : [
+        { label: 'Total Businesses', value: '—', icon: Building2, color: 'var(--accent)', trend: '', up: true },
+        { label: 'Total Users', value: '—', icon: Users, color: '#3b82f6', trend: '', up: true },
+        { label: 'Pending Approvals', value: '—', icon: Clock, color: '#f59e0b', trend: '', up: true },
+        { label: 'Customers', value: '—', icon: Globe, color: '#10b981', trend: '', up: true },
+      ];
 
   const containerStyle = {
     display: 'flex',
@@ -138,24 +159,28 @@ const SuperAdminDashboard = () => {
                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                  <thead>
                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                     <th style={{ textAlign: 'left', padding: '12px', fontSize: '13px', color: 'var(--text)', fontWeight: '500' }}>Tenant Name</th>
-                     <th style={{ textAlign: 'left', padding: '12px', fontSize: '13px', color: 'var(--text)', fontWeight: '500' }}>Industry</th>
-                     <th style={{ textAlign: 'left', padding: '12px', fontSize: '13px', color: 'var(--text)', fontWeight: '500' }}>Users</th>
+                     <th style={{ textAlign: 'left', padding: '12px', fontSize: '13px', color: 'var(--text)', fontWeight: '500' }}>Name</th>
+                     <th style={{ textAlign: 'left', padding: '12px', fontSize: '13px', color: 'var(--text)', fontWeight: '500' }}>Company</th>
+                     <th style={{ textAlign: 'left', padding: '12px', fontSize: '13px', color: 'var(--text)', fontWeight: '500' }}>Email</th>
                      <th style={{ textAlign: 'left', padding: '12px', fontSize: '13px', color: 'var(--text)', fontWeight: '500' }}>Status</th>
                      <th style={{ textAlign: 'right', padding: '12px', fontSize: '13px', color: 'var(--text)', fontWeight: '500' }}>Action</th>
                    </tr>
                  </thead>
                  <tbody>
-                   {recentTenants.map((tenant, i) => (
-                     <tr key={i} style={{ borderBottom: i === recentTenants.length - 1 ? 'none' : '1px solid var(--border)' }}>
+                   {loadingStats ? (
+                     <tr><td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: 'var(--text)' }}>Loading...</td></tr>
+                   ) : recentTenants.length === 0 ? (
+                     <tr><td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: 'var(--text)' }}>No businesses registered yet.</td></tr>
+                   ) : recentTenants.map((tenant, i) => (
+                     <tr key={tenant._id} style={{ borderBottom: i === recentTenants.length - 1 ? 'none' : '1px solid var(--border)' }}>
                        <td style={{ padding: '12px' }}>
                          <div style={{ fontWeight: '600', color: 'var(--text-bright)', fontSize: '14px' }}>{tenant.name}</div>
-                         <div style={{ fontSize: '12px', color: 'var(--text)' }}>Added {tenant.date}</div>
+                         <div style={{ fontSize: '12px', color: 'var(--text)' }}>{new Date(tenant.createdAt).toLocaleDateString()}</div>
                        </td>
-                       <td style={{ padding: '12px', fontSize: '14px' }}>{tenant.industry}</td>
-                       <td style={{ padding: '12px', fontSize: '14px' }}>{tenant.users.toLocaleString()}</td>
+                       <td style={{ padding: '12px', fontSize: '14px', color: 'var(--text)' }}>{tenant.companyName || '—'}</td>
+                       <td style={{ padding: '12px', fontSize: '14px', color: 'var(--text)' }}>{tenant.email}</td>
                        <td style={{ padding: '12px' }}>
-                         <Badge variant={tenant.status === 'active' ? 'success' : 'warning'}>{tenant.status}</Badge>
+                         <Badge variant={tenant.isApproved ? 'success' : 'warning'}>{tenant.isApproved ? 'approved' : 'pending'}</Badge>
                        </td>
                        <td style={{ padding: '12px', textAlign: 'right' }}>
                          <Button variant="ghost" size="small" onClick={() => notification.info(`Manage ${tenant.name}`)}>

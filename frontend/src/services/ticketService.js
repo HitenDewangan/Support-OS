@@ -17,8 +17,8 @@ const ticketService = {
     const response = await axiosInstance.patch(`/tickets/${id}`, ticketData);
     return response.data;
   },
-  deleteTicket: async (id) => {
-    const response = await axiosInstance.delete(`/tickets/${id}`);
+  addMessage: async (ticketId, content) => {
+    const response = await axiosInstance.post(`/tickets/${ticketId}/messages`, { content });
     return response.data;
   },
 };
