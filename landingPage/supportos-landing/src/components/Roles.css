@@ -1,0 +1,84 @@
+.roles-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.role-card {
+  border-radius: 18px;
+  padding: 28px;
+  border: 1px solid var(--border);
+  background: var(--glass);
+  transition: all 0.3s;
+  cursor: default;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Bottom accent line on hover */
+.role-card::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.role-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+.role-card:hover::after { opacity: 1; }
+
+/* Per-role accent colors */
+.rc-sa::after { background: linear-gradient(90deg, #f59e0b, #ef4444); }
+.rc-te::after { background: linear-gradient(90deg, #2563eb, #06b6d4); }
+.rc-ag::after { background: linear-gradient(90deg, #8b5cf6, #ec4899); }
+.rc-cu::after { background: linear-gradient(90deg, #10b981, #06b6d4); }
+
+.role-icon {
+  font-size: 28px;
+  margin-bottom: 14px;
+}
+
+.role-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  opacity: 0.5;
+}
+
+.role-name {
+  font-family: 'Syne', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.role-desc {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.65;
+  margin-bottom: 12px;
+}
+
+.role-path {
+  font-size: 11px;
+  font-family: monospace;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 4px 10px;
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.4);
+  display: inline-block;
+}
+
+@media (max-width: 600px) {
+  .roles-grid { grid-template-columns: 1fr; }
+}

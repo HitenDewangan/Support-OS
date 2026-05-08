@@ -1,167 +1,322 @@
-import React, { useState } from 'react';
-import { Building2, Plus, Search, ExternalLink, ShieldCheck, Users, Filter, MoreVertical, Globe, Shield, CreditCard, Mail } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Building2, Search, ShieldCheck, Users, Globe, MoreVertical, CheckCircle, XCircle, Plus, X, Eye, EyeOff } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
-import Input from '../../components/common/Input';
-import Modal from '../../components/common/Modal';
+import tenantService from '../../services/tenantService';
 import useNotification from '../../hooks/useNotification';
+
+const emptyForm = { name: '', email: '', companyName: '', tenantId: '', password: '' };
 
 const TenantList = () => {
   const notification = useNotification();
+  const [tenants, setTenants] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [actionLoading, setActionLoading] = useState(null);
 
-  const [newTenant, setNewTenant] = useState({
-    name: '',
-    domain: '',
-    plan: 'Pro',
-    adminEmail: '',
-  });
+  const [showModal, setShowModal] = useState(false);
+  const [formData, setFormData] = useState(emptyForm);
+  const [createLoading, setCreateLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
-  const tenants = [
-    { id: 1, name: 'Acme Corp', domain: 'acme.supportos.com', plan: 'Enterprise', status: 'active', agents: 45, users: 1200, logo: 'AC' },
-    { id: 2, name: 'Stark Industries', domain: 'stark.supportos.com', plan: 'Enterprise', status: 'active', agents: 120, users: 5000, logo: 'SI' },
-    { id: 3, name: 'Wayne Ent', domain: 'wayne.supportos.com', plan: 'Pro', status: 'active', agents: 12, users: 800, logo: 'WE' },
-    { id: 4, name: 'Globex', domain: 'globex.supportos.com', plan: 'Free', status: 'suspended', agents: 2, users: 15, logo: 'GX' },
-    { id: 5, name: 'Oscorp', domain: 'oscorp.supportos.com', plan: 'Pro', status: 'active', agents: 25, users: 2100, logo: 'OS' },
-    { id: 6, name: 'Umbrella Corp', domain: 'umbrella.supportos.com', plan: 'Enterprise', status: 'active', agents: 88, users: 4200, logo: 'UC' },
-  ];
+  const loadTenants = () => {
+    setLoading(true);
+    tenantService.getTenants()
+      .then((data) => setTenants(data.businesses || []))
+      .catch(() => notification.error('Failed to load businesses'))
+      .finally(() => setLoading(false));
+  };
 
-  const filteredTenants = tenants.filter(tenant => {
-    const matchesSearch = tenant.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          tenant.domain.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || tenant.status.toLowerCase() === statusFilter.toLowerCase();
+  useEffect(() => {
+    loadTenants();
+  }, []);
+
+  const handleApprove = async (id, name) => {
+    setActionLoading(id + '_approve');
+    try {
+      await tenantService.approveTenant(id);
+      notification.success(`${name} has been approved`);
+      loadTenants();
+    } catch (error) {
+      notification.error(error.response?.data?.message || 'Approval failed');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleReject = async (id, name) => {
+    if (!window.confirm(`Reject and delete ${name}? This cannot be undone.`)) return;
+    setActionLoading(id + '_reject');
+    try {
+      await tenantService.rejectTenant(id);
+      notification.success(`${name} has been rejected`);
+      loadTenants();
+    } catch (error) {
+      notification.error(error.response?.data?.message || 'Rejection failed');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleCreateTenant = async (e) => {
+    e.preventDefault();
+    setCreateLoading(true);
+    try {
+      await tenantService.createTenant(formData);
+      notification.success(`Business "${formData.companyName}" created successfully`);
+      setShowModal(false);
+      setFormData(emptyForm);
+      loadTenants();
+    } catch (error) {
+      notification.error(error.response?.data?.message || 'Failed to create tenant');
+    } finally {
+      setCreateLoading(false);
+    }
+  };
+
+  const filtered = tenants.filter((t) => {
+    const matchesSearch =
+      t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (t.companyName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.email.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus =
+      statusFilter === 'all' ||
+      (statusFilter === 'active' && t.isApproved) ||
+      (statusFilter === 'pending' && !t.isApproved);
     return matchesSearch && matchesStatus;
   });
 
-  const handleCreateTenant = (e) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setIsCreateModalOpen(false);
-      notification.success(`${newTenant.name} has been created successfully!`);
-      setNewTenant({ name: '', domain: '', plan: 'Pro', adminEmail: '' });
-    }, 1500);
+  const inputStyle = {
+    width: '100%',
+    padding: '10px 14px',
+    borderRadius: '10px',
+    border: '1px solid var(--border)',
+    background: 'var(--bg)',
+    color: 'var(--text-bright)',
+    fontSize: '14px',
+    outline: 'none',
+    boxSizing: 'border-box',
+  };
+
+  const labelStyle = {
+    display: 'block',
+    fontSize: '13px',
+    fontWeight: '600',
+    color: 'var(--text)',
+    marginBottom: '6px',
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
         <div>
-          <h1 style={{ color: 'var(--text-bright)', fontSize: '24px', fontWeight: '700' }}>Tenant Management</h1>
-          <p style={{ color: 'var(--text)', fontSize: '14px' }}>Manage all companies and instances on the platform.</p>
+          <h1 style={{ color: 'var(--text-bright)', fontSize: '24px', fontWeight: '700' }}>Business Management</h1>
+          <p style={{ color: 'var(--text)', fontSize: '14px' }}>Manage business tenants and approve registrations.</p>
         </div>
-        <Button variant="primary" icon={Plus} onClick={() => setIsCreateModalOpen(true)}>
+        <Button variant="primary" icon={Plus} onClick={() => setShowModal(true)}>
           Create New Tenant
         </Button>
       </div>
 
-      <div className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ position: 'relative' }}>
-              <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text)' }} />
-              <input 
-                placeholder="Search by tenant name, domain or ID..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '12px 16px 12px 44px',
-                  borderRadius: '12px',
-                  border: '1px solid var(--border)',
-                  backgroundColor: 'var(--bg)',
-                  color: 'var(--text-bright)',
-                  outline: 'none',
-                  fontSize: '14px'
-                }}
-              />
-            </div>
+      {showModal && (
+        <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '24px' }}>
+          <div className="glass-card" style={{ width: '100%', maxWidth: '480px', padding: '32px', position: 'relative' }}>
+            <button
+              onClick={() => { setShowModal(false); setFormData(emptyForm); }}
+              style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text)' }}
+            >
+              <X size={20} />
+            </button>
+
+            <h2 style={{ color: 'var(--text-bright)', fontSize: '20px', fontWeight: '700', marginBottom: '8px' }}>Create New Tenant</h2>
+            <p style={{ color: 'var(--text)', fontSize: '13px', marginBottom: '24px' }}>The business admin account will be created and approved immediately.</p>
+
+            <form onSubmit={handleCreateTenant} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={labelStyle}>Admin Name</label>
+                <input
+                  style={inputStyle}
+                  placeholder="John Doe"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>Admin Email</label>
+                <input
+                  type="email"
+                  style={inputStyle}
+                  placeholder="admin@company.com"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>Business Name</label>
+                <input
+                  style={inputStyle}
+                  placeholder="Acme Corp"
+                  value={formData.companyName}
+                  onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>Business ID <span style={{ fontWeight: '400', color: 'var(--text)', fontSize: '12px' }}>(unique identifier customers use to register)</span></label>
+                <input
+                  style={inputStyle}
+                  placeholder="acme-corp"
+                  value={formData.tenantId}
+                  onChange={(e) => setFormData({ ...formData, tenantId: e.target.value.toLowerCase().replace(/\s+/g, '-') })}
+                  required
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>Temporary Password</label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    style={{ ...inputStyle, paddingRight: '40px' }}
+                    placeholder="Min. 6 characters"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    required
+                    minLength={6}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text)' }}
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  fullWidth
+                  onClick={() => { setShowModal(false); setFormData(emptyForm); }}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" fullWidth loading={createLoading}>
+                  Create Tenant
+                </Button>
+              </div>
+            </form>
           </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            {['All', 'Active', 'Suspended'].map((f) => (
-              <button
-                key={f}
-                onClick={() => setStatusFilter(f.toLowerCase())}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '8px',
-                  fontSize: '13px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  backgroundColor: statusFilter === f.toLowerCase() ? 'var(--accent)' : 'transparent',
-                  color: statusFilter === f.toLowerCase() ? 'white' : 'var(--text)',
-                  border: 'none',
-                }}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
+        </div>
+      )}
+
+      <div className="glass-card" style={{ padding: '24px', display: 'flex', gap: '16px', alignItems: 'center' }}>
+        <div style={{ flex: 1, position: 'relative' }}>
+          <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text)' }} />
+          <input
+            placeholder="Search by name, company or email..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{ width: '100%', padding: '12px 16px 12px 44px', borderRadius: '12px', border: '1px solid var(--border)', backgroundColor: 'var(--bg)', color: 'var(--text-bright)', outline: 'none', fontSize: '14px', boxSizing: 'border-box' }}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {['All', 'Active', 'Pending'].map((f) => (
+            <button
+              key={f}
+              onClick={() => setStatusFilter(f.toLowerCase())}
+              style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s', backgroundColor: statusFilter === f.toLowerCase() ? 'var(--accent)' : 'transparent', color: statusFilter === f.toLowerCase() ? 'white' : 'var(--text)', border: 'none' }}
+            >
+              {f}
+            </button>
+          ))}
         </div>
       </div>
 
       <div className="glass-card" style={{ overflow: 'hidden' }}>
-        {filteredTenants.length > 0 ? (
+        {loading ? (
+          <div style={{ padding: '64px', textAlign: 'center', color: 'var(--text)' }}>Loading businesses...</div>
+        ) : filtered.length > 0 ? (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'var(--bg)' }}>
-                  <th style={{ padding: '16px', color: 'var(--text)', fontWeight: '600', fontSize: '13px' }}>TENANT</th>
-                  <th style={{ padding: '16px', color: 'var(--text)', fontWeight: '600', fontSize: '13px' }}>PLAN</th>
+                  <th style={{ padding: '16px', color: 'var(--text)', fontWeight: '600', fontSize: '13px' }}>BUSINESS</th>
+                  <th style={{ padding: '16px', color: 'var(--text)', fontWeight: '600', fontSize: '13px' }}>COMPANY</th>
+                  <th style={{ padding: '16px', color: 'var(--text)', fontWeight: '600', fontSize: '13px' }}>BUSINESS ID</th>
                   <th style={{ padding: '16px', color: 'var(--text)', fontWeight: '600', fontSize: '13px' }}>STATUS</th>
-                  <th style={{ padding: '16px', color: 'var(--text)', fontWeight: '600', fontSize: '13px' }}>USAGE</th>
-                  <th style={{ padding: '16px', color: 'var(--text)', fontWeight: '600', fontSize: '13px' }}>DOMAIN</th>
+                  <th style={{ padding: '16px', color: 'var(--text)', fontWeight: '600', fontSize: '13px' }}>REGISTERED</th>
                   <th style={{ padding: '16px', textAlign: 'right' }}></th>
                 </tr>
               </thead>
               <tbody>
-                {filteredTenants.map(tenant => (
-                  <tr key={tenant.id} style={{ borderBottom: '1px solid var(--border)', transition: 'background 0.2s' }}>
+                {filtered.map((tenant) => (
+                  <tr key={tenant._id} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: '16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: 'var(--accent-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)', fontWeight: '700' }}>
-                          {tenant.logo}
+                        <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: 'var(--accent-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)', fontWeight: '700', fontSize: '14px' }}>
+                          {tenant.name.slice(0, 2).toUpperCase()}
                         </div>
                         <div>
                           <div style={{ color: 'var(--text-bright)', fontWeight: '600', fontSize: '14px' }}>{tenant.name}</div>
-                          <div style={{ color: 'var(--text)', fontSize: '12px' }}>ID: T-{tenant.id}00{tenant.id}</div>
+                          <div style={{ color: 'var(--text)', fontSize: '12px' }}>{tenant.email}</div>
                         </div>
-                      </div>
-                    </td>
-                    <td style={{ padding: '16px' }}>
-                      <Badge variant={tenant.plan === 'Enterprise' ? 'primary' : 'outline'}>{tenant.plan}</Badge>
-                    </td>
-                    <td style={{ padding: '16px' }}>
-                      <Badge variant={tenant.status === 'active' ? 'success' : 'error'}>
-                        {tenant.status.toUpperCase()}
-                      </Badge>
-                    </td>
-                    <td style={{ padding: '16px' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', color: 'var(--text-bright)' }}>
-                            <Users size={14} style={{ color: 'var(--text)' }} /> {tenant.agents} Agents
-                         </div>
-                         <div style={{ fontSize: '12px', color: 'var(--text)' }}>
-                            {tenant.users.toLocaleString()} End Users
-                         </div>
                       </div>
                     </td>
                     <td style={{ padding: '16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text)', fontSize: '13px' }}>
-                         <Globe size={14} />
-                         {tenant.domain}
+                        <Building2 size={14} />
+                        {tenant.companyName || '—'}
                       </div>
                     </td>
+                    <td style={{ padding: '16px' }}>
+                      {tenant.tenantId ? (
+                        <code style={{ fontSize: '12px', backgroundColor: 'var(--bg)', padding: '3px 8px', borderRadius: '6px', color: 'var(--accent)', border: '1px solid var(--border)' }}>
+                          {tenant.tenantId}
+                        </code>
+                      ) : (
+                        <span style={{ color: 'var(--text)', fontSize: '12px' }}>—</span>
+                      )}
+                    </td>
+                    <td style={{ padding: '16px' }}>
+                      <Badge variant={tenant.isApproved ? 'success' : 'warning'}>
+                        {tenant.isApproved ? 'APPROVED' : 'PENDING'}
+                      </Badge>
+                    </td>
+                    <td style={{ padding: '16px', color: 'var(--text)', fontSize: '13px' }}>
+                      {new Date(tenant.createdAt).toLocaleDateString()}
+                    </td>
                     <td style={{ padding: '16px', textAlign: 'right' }}>
-                      <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
-                        <Button variant="ghost" size="small" icon={ExternalLink} onClick={() => notification.info(`Managing ${tenant.name}`)} />
-                        <Button variant="ghost" size="small" icon={ShieldCheck} onClick={() => notification.info(`Security for ${tenant.name}`)} />
-                        <Button variant="ghost" size="small" icon={MoreVertical} onClick={() => notification.info(`Options for ${tenant.name}`)} />
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                        {!tenant.isApproved && (
+                          <>
+                            <Button
+                              variant="primary"
+                              size="small"
+                              icon={CheckCircle}
+                              loading={actionLoading === tenant._id + '_approve'}
+                              onClick={() => handleApprove(tenant._id, tenant.name)}
+                            >
+                              Approve
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="small"
+                              icon={XCircle}
+                              loading={actionLoading === tenant._id + '_reject'}
+                              onClick={() => handleReject(tenant._id, tenant.name)}
+                            >
+                              Reject
+                            </Button>
+                          </>
+                        )}
+                        {tenant.isApproved && (
+                          <Button variant="ghost" size="small" icon={MoreVertical} onClick={() => notification.info(`Options for ${tenant.name}`)} />
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -171,84 +326,18 @@ const TenantList = () => {
           </div>
         ) : (
           <div style={{ padding: '64px', textAlign: 'center' }}>
-            <h3 style={{ color: 'var(--text-bright)', fontSize: '18px', fontWeight: '700' }}>No tenants found</h3>
-            <p style={{ color: 'var(--text)', fontSize: '14px', marginTop: '8px' }}>Try adjusting your search or status filter.</p>
+            <h3 style={{ color: 'var(--text-bright)', fontSize: '18px', fontWeight: '700' }}>No businesses found</h3>
+            <p style={{ color: 'var(--text)', fontSize: '14px', marginTop: '8px' }}>
+              {searchQuery ? 'Try adjusting your search.' : 'No business registrations yet.'}
+            </p>
           </div>
         )}
         <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border)', backgroundColor: 'var(--bg)' }}>
-           <span style={{ fontSize: '13px', color: 'var(--text)' }}>Showing {filteredTenants.length} of {tenants.length} tenants</span>
-           <div style={{ display: 'flex', gap: '8px' }}>
-              <Button variant="outline" size="small" disabled>Previous</Button>
-              <Button variant="outline" size="small" onClick={() => notification.info('Next page')}>Next</Button>
-           </div>
+          <span style={{ fontSize: '13px', color: 'var(--text)' }}>
+            Showing {filtered.length} of {tenants.length} businesses
+          </span>
         </div>
       </div>
-
-      {/* Create Tenant Modal */}
-      <Modal 
-        isOpen={isCreateModalOpen} 
-        onClose={() => setIsCreateModalOpen(false)} 
-        title="Create New Tenant"
-        footer={(
-          <>
-            <Button variant="ghost" onClick={() => setIsCreateModalOpen(false)}>Cancel</Button>
-            <Button variant="primary" loading={isSubmitting} onClick={handleCreateTenant}>Create Workspace</Button>
-          </>
-        )}
-      >
-        <form onSubmit={handleCreateTenant} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <Input 
-            label="Company Name" 
-            placeholder="e.g. Stark Industries" 
-            value={newTenant.name}
-            onChange={e => setNewTenant({...newTenant, name: e.target.value})}
-            icon={Building2}
-            required
-          />
-          <Input 
-            label="Workspace Domain" 
-            placeholder="stark.supportos.com" 
-            value={newTenant.domain}
-            onChange={e => setNewTenant({...newTenant, domain: e.target.value})}
-            icon={Globe}
-            required
-          />
-          <Input 
-            label="Admin Email" 
-            type="email"
-            placeholder="admin@company.com" 
-            value={newTenant.adminEmail}
-            onChange={e => setNewTenant({...newTenant, adminEmail: e.target.value})}
-            icon={Mail}
-            required
-          />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-bright)', paddingLeft: '4px' }}>Subscription Plan</label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              {['Pro', 'Enterprise'].map(p => (
-                <div 
-                  key={p}
-                  onClick={() => setNewTenant({...newTenant, plan: p})}
-                  style={{
-                    padding: '16px',
-                    borderRadius: '12px',
-                    border: `2px solid ${newTenant.plan === p ? 'var(--accent)' : 'var(--border)'}`,
-                    backgroundColor: newTenant.plan === p ? 'var(--accent-muted)' : 'var(--surface)',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    textAlign: 'center'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '8px', color: newTenant.plan === p ? 'var(--accent)' : 'var(--text)' }}>
-                    {p === 'Pro' ? <CreditCard size={20} /> : <Shield size={20} />}
-                  </div>
-                  <div style={{ fontSize: '14px', fontWeight: '700', color: newTenant.plan === p ? 'var(--accent)' : 'var(--text-bright)' }}>{p}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </form>
-      </Modal>
     </div>
   );
 };
